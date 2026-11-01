@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>产教智对 · 产业需求与高校专业动态适配智能分析平台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect width=%2240%22 height=%2240%22 rx=%2210%22 fill=%22%230f2742%22/><path d=%22M11 26V14l9 6 9-6v12%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222.4%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/><circle cx=%2220%22 cy=%2231%22 r=%222.2%22 fill=%22%231baf7a%22/></svg>">
+<link rel="stylesheet" href="styles.css">
+<style>[v-cloak]{display:none}</style>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ==================== 登录 ==================== -->
+  <div v-if="!logged" class="login-wrap">
+    <div class="login-left">
+      <div class="login-brand">
+        <svg viewBox="0 0 40 40" fill="none"><rect x="1" y="1" width="38" height="38" rx="11" stroke="rgba(255,255,255,.28)"/><path d="M11 26V14l9 6 9-6v12" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="31" r="2.2" fill="#1baf7a"/></svg>
+        <div>产教智对 <span style="font-weight:400;color:rgba(255,255,255,.45);font-size:12px;">CHANJIAO ZHIDUI</span></div>
+      </div>
+      <div>
+        <h1 class="login-title">产业需求与高校专业<br>动态适配智能分析平台</h1>
+        <p class="login-sub">面向高校教务处与专业负责人，用真实招聘数据诊断专业培养差距，自动生成可执行、可验证、可迭代的课程调整方案。</p>
+        <div class="login-points">
+          <div class="login-point"><span class="dot"></span><span>招聘岗位技能提取 → 培养方案课程映射 → 供需缺口量化</span></div>
+          <div class="login-point"><span class="dot"></span><span>方案生成经过学分、学时、实践比例三重约束校验</span></div>
+          <div class="login-point"><span class="dot"></span><span>四年效果模拟 + 风险识别 + 一键导出决策报告</span></div>
+        </div>
+      </div>
+      <div class="login-foot">「产教智对」赛题参赛作品 · 演示版本 v1.0</div>
+    </div>
+    <div class="login-right">
+      <form class="login-card" @submit.prevent="doLogin">
+        <h2>登录平台</h2>
+        <div class="hint">使用演示账号进入，或直接点击登录</div>
+        <div class="login-field">
+          <label>账号</label>
+          <input v-model="loginUser" placeholder="请输入账号" autocomplete="username">
+        </div>
+        <div class="login-field">
+          <label>密码</label>
+          <input v-model="loginPass" type="password" placeholder="请输入密码" autocomplete="current-password">
+        </div>
+        <button class="login-btn" type="submit">进入系统</button>
+        <div class="login-err" v-if="loginErr">{{ loginErr }}</div>
+        <div class="login-note">演示环境已预置账号 admin / 123456，任意非空账号密码均可登录。系统数据与计算全部在本机完成，断网可正常演示。</div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 主框架 ==================== -->
+  <div v-else class="shell">
+    <aside class="sidebar">
+      <div class="side-brand">
+        <svg viewBox="0 0 40 40" fill="none"><rect x="1" y="1" width="38" height="38" rx="11" stroke="rgba(255,255,255,.28)"/><path d="M11 26V14l9 6 9-6v12" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="31" r="2.2" fill="#1baf7a"/></svg>
+        <div>
+          <div class="name">产教智对</div>
+          <div class="sub">专业动态调整决策平台</div>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <button v-for="n in navItems" :key="n.key" class="nav-item" :class="{active: view===n.key}" @click="go(n.key)">
+          <span class="nav-no">{{ n.no }}</span>
+          <span class="nav-text">{{ n.label }}<small>{{ n.sub }}</small></span>
+        </button>
+      </nav>
+      <div class="side-foot">
+        <div class="status"><span class="dot"></span>本地运行 · 断网可用</div>
+        <div class="ver">v1.0.0 · 数据共 {{ counts.postings || 0 }} 条岗位</div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="crumb"><b>{{ currentTitle }}</b><span>/</span><span>{{ currentSub }}</span></div>
+        <div class="top-right">
+          <select class="select topbar-select" v-model="major" @change="onMajorChange" title="切换专业">
+            <option v-for="m in meta.majors" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <span class="chip" v-if="llmEnabled">AI 增强已开启</span>
+          <span class="chip" v-else>规则引擎模式</span>
+          <div class="avatar">{{ (loginUser || 'A').slice(0,1).toUpperCase() }}</div>
+        </div>
+      </header>
+
+      <main class="content">
+
+        <!-- ============ 工作台 ============ -->
+        <section v-if="view==='dashboard'">
+          <div class="hero">
+            <div>
+              <h1>让专业调整，有数据、有依据、有闭环</h1>
+              <p>从招聘岗位中提取产业技能需求，与高校培养方案逐项比对，量化缺口并生成可执行的课程调整方案；方案会自动经过约束校验与迭代优化。</p>
+            </div>
+            <div class="hero-actions">
+              <button class="btn" @click="runAnalysis" :disabled="busy.analyze">{{ busy.analyze ? '分析中…' : '开始智能诊断' }}</button>
+              <button class="btn ghost" @click="go('data')">管理数据</button>
+            </div>
+          </div>
+
+          <div class="grid grid-kpi" style="margin-bottom:18px;">
+            <div class="kpi accent">
+              <div class="label">当前专业匹配度</div>
+              <div class="value">{{ analysis ? analysis.match_score : '—' }}<small v-if="analysis">/100</small></div>
+              <div class="foot">{{ analysis ? (analysis.match_score >= 70 ? '供需基本匹配' : '存在明显技能缺口') : '运行诊断后生成' }}</div>
+            </div>
+            <div class="kpi">
+              <div class="label">招聘岗位样本</div>
+              <div class="value">{{ counts.postings || 0 }}<small>条</small></div>
+              <div class="foot">{{ analysis ? analysis.scope.clusters.join(' · ') : '覆盖多个岗位类别' }}</div>
+            </div>
+            <div class="kpi">
+              <div class="label">培养方案课程</div>
+              <div class="value">{{ programCourses.length }}<small>门</small></div>
+              <div class="foot">总学分 {{ programCredits }} · 实践 {{ programPractice }}%</div>
+            </div>
+            <div class="kpi">
+              <div class="label">技能词库</div>
+              <div class="value">{{ meta.skills || 0 }}<small>项</small></div>
+              <div class="foot">覆盖 {{ meta.majors.length }} 个专业</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>项目推进流程</h3>
+                <div class="desc">每一步的结果都会自动保存，可随时回到任意环节</div>
+              </div>
+            </div>
+            <div class="flow">
+              <div class="flow-step" :class="{done: analysis, current: !analysis}">
+                <span class="no">01</span>
+                <div><div class="t">数据接入</div><div class="s">三类数据</div></div>
+              </div>
+              <div class="flow-line"></div>
+              <div class="flow-step" :class="{done: plan, current: analysis && !plan}">
+                <span class="no">02</span>
+                <div><div class="t">供需诊断</div><div class="s">技能缺口量化</div></div>
+              </div>
+              <div class="flow-line"></div>
+              <div class="flow-step" :class="{done: sim, current: plan && !sim}">
+                <span class="no">03</span>
+                <div><div class="t">方案生成</div><div class="s">约束自动校验</div></div>
+              </div>
+              <div class="flow-line"></div>
+              <div class="flow-step" :class="{done: risk, current: sim && !risk}">
+                <span class="no">04</span>
+                <div><div class="t">效果与风险</div><div class="s">模拟与风险</div></div>
+              </div>
+              <div class="flow-line"></div>
+              <div class="flow-step" :class="{done: reportReady, current: risk && !reportReady}">
+                <span class="no">05</span>
+                <div><div class="t">决策报告</div><div class="s">报告导出</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-2" style="margin-top:18px;">
+            <div class="card">
+              <div class="card-head">
+                <div><h3>岗位需求结构</h3><div class="desc">当前招聘数据中各岗位类别的样本分布</div></div>
+              </div>
+              <chart-box :option="clusterOption" height="320px"></chart-box>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <div><h3>能力建设四个抓手</h3><div class="desc">系统围绕赛题四项核心任务设计</div></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="quick-card"><div class="ico" style="background:#eaf2fd;color:#175cd3;">①</div><div><h4>差距诊断</h4><p>技能结构、培养方向、招生规模三个维度的差距量化</p></div></div>
+                <div class="quick-card"><div class="ico" style="background:#e9f7ef;color:#067647;">②</div><div><h4>方案生成</h4><p>新增课程、学时调整、方向分流、招生规模调整</p></div></div>
+                <div class="quick-card"><div class="ico" style="background:#fff3e8;color:#b54708;">③</div><div><h4>效果模拟</h4><p>乐观 / 基准 / 悲观三种情景，逐年推演就业与匹配度</p></div></div>
+                <div class="quick-card"><div class="ico" style="background:#fdeeee;color:#b42318;">④</div><div><h4>风险应对</h4><p>师资、分流、排课、产业波动、招生调整五类风险</p></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 数据中心 ============ -->
+        <section v-if="view==='data'">
+          <div class="page-head">
+            <div>
+              <h1>数据中心</h1>
+              <p>支持 Excel / CSV 导入，系统会自动识别列名并抽取技能；导入后立即覆盖对应数据集</p>
+            </div>
+            <div class="toolbar">
+              <span class="tag gray">当前招聘样本 {{ counts.postings }} 条</span>
+              <span class="tag gray">培养方案 {{ counts.programs }} 个</span>
+            </div>
+          </div>
+
+          <div class="upload-grid">
+            <div class="upload-card">
+              <h4>招聘岗位数据</h4>
+              <div class="sub">岗位名称、岗位描述、薪资、城市等</div>
+              <div class="drop" @click="$refs.filePostings.click()">
+                <div class="ico">↑</div>
+                <div class="t">{{ busy.postings ? '正在导入…' : '点击选择文件' }}</div>
+                <div class="s">支持 .xlsx / .xls / .csv</div>
+              </div>
+              <input type="file" ref="filePostings" style="display:none" accept=".csv,.xlsx,.xls" @change="uploadPostings">
+              <div class="upload-meta">
+                <a :href="'/api/template/postings'" download>下载字段模板</a>
+                <span v-if="uploadMsg.postings">{{ uploadMsg.postings }}</span>
+              </div>
+            </div>
+
+            <div class="upload-card">
+              <h4>专业培养方案</h4>
+              <div class="sub">课程名称、学分、学时、学期、课程性质</div>
+              <div class="drop" @click="$refs.fileProgram.click()">
+                <div class="ico">↑</div>
+                <div class="t">{{ busy.program ? '正在导入…' : '点击选择文件' }}</div>
+                <div class="s">导入到当前专业：{{ major }}</div>
+              </div>
+              <input class="input new-major-input" v-model.trim="newMajor"
+                     placeholder="或输入新专业名称（如 软件工程）">
+              <div class="small muted" style="margin-top:6px;">填写新专业名称后上传，即可新增一个可分析的专业。</div>
+              <input type="file" ref="fileProgram" style="display:none" accept=".csv,.xlsx,.xls" @change="uploadProgram">
+              <div class="upload-meta">
+                <a :href="'/api/template/program'" download>下载字段模板</a>
+                <span v-if="uploadMsg.program">{{ uploadMsg.program }}</span>
+              </div>
+            </div>
+
+            <div class="upload-card">
+              <h4>就业质量数据</h4>
+              <div class="sub">年份、就业率、平均起薪、专业对口率</div>
+              <div class="drop" @click="$refs.fileEmployment.click()">
+                <div class="ico">↑</div>
+                <div class="t">{{ busy.employment ? '正在导入…' : '点击选择文件' }}</div>
+                <div class="s">用于模拟的基准值</div>
+              </div>
+              <input type="file" ref="fileEmployment" style="display:none" accept=".csv,.xlsx,.xls" @change="uploadEmployment">
+              <div class="upload-meta">
+                <a :href="'/api/template/employment'" download>下载字段模板</a>
+                <span v-if="uploadMsg.employment">{{ uploadMsg.employment }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="notice" style="margin-top:18px;">
+            当前展示的是系统内置示例数据，用于演示完整流程。正式比赛时请用官方数据集替换：招聘数据建议不少于 300 条，培养方案需包含全部专业课程。
+          </div>
+
+          <div class="card" style="margin-top:18px;">
+            <div class="card-head">
+              <div><h3>招聘样本预览</h3><div class="desc">最近导入的 10 条岗位，右侧为系统自动识别的技能</div></div>
+              <button class="btn sm" @click="loadPreview">刷新</button>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+              <thead>
+                <tr style="text-align:left;color:#667085;border-bottom:1px solid #e4e9f0;">
+                  <th style="padding:8px 6px;font-weight:600;">岗位</th>
+                  <th style="padding:8px 6px;font-weight:600;">公司 / 城市</th>
+                  <th style="padding:8px 6px;font-weight:600;">月薪</th>
+                  <th style="padding:8px 6px;font-weight:600;">识别技能</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in postingsPreview" :key="p.id" style="border-bottom:1px solid #eef2f7;">
+                  <td style="padding:9px 6px;font-weight:500;">{{ p.title }}</td>
+                  <td style="padding:9px 6px;color:#667085;">{{ p.company }} · {{ p.city }}</td>
+                  <td style="padding:9px 6px;color:#475467;">{{ p.salary_min ? (p.salary_min/1000).toFixed(0)+'k' : '—' }}<span v-if="p.salary_max">-{{ (p.salary_max/1000).toFixed(0) }}k</span></td>
+                  <td style="padding:9px 6px;">
+                    <div class="skill-chips">
+                      <span class="skill-chip" v-for="s in p.skills.slice(0,6)" :key="s.name">{{ s.name }}</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card" style="margin-top:18px;">
+            <div class="card-head">
+              <div><h3>{{ major }} · 课程体系</h3><div class="desc">共 {{ programCourses.length }} 门课程，总学分 {{ programCredits }}；系统按课程名自动映射技能</div></div>
+              <span class="tag blue">实践学分占比 {{ programPractice }}%</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+              <thead>
+                <tr style="text-align:left;color:#667085;border-bottom:1px solid #e4e9f0;">
+                  <th style="padding:8px 6px;font-weight:600;">课程</th>
+                  <th style="padding:8px 6px;font-weight:600;">学分</th>
+                  <th style="padding:8px 6px;font-weight:600;">学时</th>
+                  <th style="padding:8px 6px;font-weight:600;">性质</th>
+                  <th style="padding:8px 6px;font-weight:600;">对应技能</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in programCourses.slice(0,12)" :key="c.id" style="border-bottom:1px solid #eef2f7;">
+                  <td style="padding:9px 6px;font-weight:500;">{{ c.name }}</td>
+                  <td style="padding:9px 6px;">{{ c.credits }}</td>
+                  <td style="padding:9px 6px;">{{ c.hours }}</td>
+                  <td style="padding:9px 6px;"><span class="tag" :class="c.type==='实践'?'orange':(c.type==='选修'?'gray':'blue')">{{ c.type }}</span></td>
+                  <td style="padding:9px 6px;">
+                    <div class="skill-chips">
+                      <span class="skill-chip" v-for="s in c.skills.slice(0,4)" :key="s.id">{{ s.name }}</span>
+                      <span v-if="!c.skills.length" class="muted">通识课程</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="small muted" style="margin-top:10px;">仅预览前 12 门课程；完整课程表可在「供需诊断」中查看分析结果。</div>
+          </div>
+        </section>
+
+        <!-- ============ 供需诊断 ============ -->
+        <section v-if="view==='analysis'">
+          <div class="page-head">
+            <div>
+              <h1>供需诊断</h1>
+              <p>用同一套技能编码对齐「企业要什么」与「学校教什么」，量化每一项技能的缺口</p>
+            </div>
+            <div class="toolbar">
+              <select class="select" v-model="major" @change="onMajorChange">
+                <option v-for="m in meta.majors" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <button class="btn primary" @click="runAnalysis" :disabled="busy.analyze">{{ busy.analyze ? '分析中…' : '重新诊断' }}</button>
+            </div>
+          </div>
+
+          <div v-if="!analysis" class="empty">
+            <div class="icon">◎</div>
+            <div class="big">还没有诊断结果</div>
+            <div>选择专业后点击「开始诊断」，系统会在几秒内完成技能抽取与供需比对</div>
+            <button class="btn accent" style="margin-top:18px;" @click="runAnalysis" :disabled="busy.analyze">开始诊断</button>
+          </div>
+
+          <template v-else>
+            <div class="grid grid-kpi" style="margin-bottom:18px;">
+              <div class="kpi accent">
+                <div class="label">培养匹配度</div>
+                <div class="value">{{ analysis.match_score }}<small>/100</small></div>
+                <div class="foot">按需求权重加权的技能覆盖率</div>
+              </div>
+              <div class="kpi">
+                <div class="label">岗位样本</div>
+                <div class="value">{{ analysis.scope.postings }}<small>条</small></div>
+                <div class="foot">{{ analysis.scope.date_range.join(' ~ ') }}</div>
+              </div>
+              <div class="kpi">
+                <div class="label">重点技能缺口</div>
+                <div class="value">{{ gapCount }}<small>项</small></div>
+                <div class="foot">缺口 ≥ 8 分的技能</div>
+              </div>
+              <div class="kpi">
+                <div class="label">岗位需求增速</div>
+                <div class="value" :class="analysis.base.demand_growth >= 0 ? 'trend-up' : 'trend-down'">
+                  {{ analysis.base.demand_growth > 0 ? '+' : '' }}{{ analysis.base.demand_growth }}<small>%</small>
+                </div>
+                <div class="foot">近半年对比前半年</div>
+              </div>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="card" style="grid-column:span 1;">
+                <div class="card-head">
+                  <div><h3>技能供需对比</h3><div class="desc">缺口最大的 12 项技能（0–100 指数）</div></div>
+                  <div class="chart-legend"><span><i style="background:#2a78d6"></i>市场需求</span><span><i style="background:#eb6834"></i>培养覆盖</span></div>
+                </div>
+                <chart-box :option="demandOption" height="380px"></chart-box>
+              </div>
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>能力结构雷达</h3><div class="desc">按技能分类比较需求与覆盖</div></div>
+                </div>
+                <chart-box :option="radarOption" height="380px"></chart-box>
+              </div>
+            </div>
+
+            <div class="grid grid-2" style="margin-top:18px;">
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>培养方向优先级</h3><div class="desc">方向缺口 × 岗位需求分量，数值越高越应优先建设</div></div>
+                </div>
+                <div v-for="(d,i) in analysis.directions" :key="d.key" class="direction-item">
+                  <span class="rank">{{ i+1 }}</span>
+                  <div style="flex:1;min-width:0;">
+                    <div class="name">{{ d.name }}</div>
+                    <div class="sub">{{ d.desc }}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div class="val">{{ d.priority }}</div>
+                    <div class="sub">缺口 {{ d.gap }} · 覆盖 {{ d.coverage }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>招生规模建议</h3><div class="desc">结合就业率趋势与岗位需求增速</div></div>
+                  <span class="tag" :class="analysis.scale.adjustment < 0 ? 'orange' : (analysis.scale.adjustment > 0 ? 'green' : 'blue')">
+                    {{ analysis.scale.adjustment === 0 ? '维持规模' : (analysis.scale.adjustment > 0 ? '建议扩招 ' : '建议缩减 ') + Math.abs(analysis.scale.adjustment) + '%' }}
+                  </span>
+                </div>
+                <div class="metric-row" style="margin-bottom:14px;">
+                  <div class="metric"><div class="k">近一届就业率</div><div class="v">{{ analysis.base.employment_rate }}<small>%</small></div></div>
+                  <div class="metric"><div class="k">近三年趋势</div><div class="v" :class="analysis.base.emp_trend >= 0 ? 'trend-up' : 'trend-down'">{{ analysis.base.emp_trend > 0 ? '+' : '' }}{{ analysis.base.emp_trend }}<small>pp</small></div></div>
+                  <div class="metric"><div class="k">需求增速</div><div class="v">{{ analysis.base.demand_growth }}<small>%</small></div></div>
+                </div>
+                <p class="small" style="color:#475467;line-height:1.85;">{{ analysis.scale.reason }}</p>
+                <div class="notice" style="margin-top:12px;">招生调整按「每年不超过 ±10%、三年滚动评估」执行，避免一次性大幅调整带来资源浪费。</div>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:18px;">
+              <div class="card-head">
+                <div><h3>技能差距明细</h3><div class="desc">缺口 = max(0, 需求指数 − 培养覆盖)，按缺口降序</div></div>
+                <span class="tag gray">共 {{ analysis.skills.length }} 项技能</span>
+              </div>
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="text-align:left;color:#667085;border-bottom:1px solid #e4e9f0;">
+                    <th style="padding:8px 6px;font-weight:600;">技能</th>
+                    <th style="padding:8px 6px;font-weight:600;">分类</th>
+                    <th style="padding:8px 6px;font-weight:600;text-align:right;">需求</th>
+                    <th style="padding:8px 6px;font-weight:600;text-align:right;">提及率</th>
+                    <th style="padding:8px 6px;font-weight:600;text-align:right;">覆盖</th>
+                    <th style="padding:8px 6px;font-weight:600;text-align:right;">缺口</th>
+                    <th style="padding:8px 6px;font-weight:600;">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="s in analysis.skills.slice(0,20)" :key="s.skill_id" style="border-bottom:1px solid #eef2f7;">
+                    <td style="padding:9px 6px;font-weight:500;">{{ s.name }}</td>
+                    <td style="padding:9px 6px;color:#667085;">{{ s.cat }}</td>
+                    <td style="padding:9px 6px;text-align:right;" class="mono">{{ s.demand }}</td>
+                    <td style="padding:9px 6px;text-align:right;" class="mono">{{ s.mention_rate }}%</td>
+                    <td style="padding:9px 6px;text-align:right;" class="mono">{{ s.coverage }}</td>
+                    <td style="padding:9px 6px;text-align:right;font-weight:600;" class="mono" :style="{color: s.gap>=20?'#b42318':(s.gap>0?'#b54708':'#067647')}">{{ s.gap }}</td>
+                    <td style="padding:9px 6px;"><span class="tag" :class="s.gap>=8?'red':(s.coverage>0?'green':'orange')">{{ s.status }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </section>
+
+        <!-- ============ 方案生成 ============ -->
+        <section v-if="view==='plan'">
+          <div class="page-head">
+            <div>
+              <h1>方案生成</h1>
+              <p>基于缺口自动生成调整方案，并逐版本检查学分、学时、课程数与实践比例约束</p>
+            </div>
+            <div class="toolbar">
+              <span class="tag gray">专业：{{ major }}</span>
+            </div>
+          </div>
+
+          <div v-if="!analysis" class="empty">
+            <div class="icon">◎</div>
+            <div class="big">请先完成供需诊断</div>
+            <div>方案生成依赖技能缺口分析结果</div>
+            <button class="btn accent" style="margin-top:18px;" @click="runAnalysis">去诊断</button>
+          </div>
+
+          <template v-else>
+            <div class="card">
+              <div class="card-head">
+                <div><h3>生成参数</h3><div class="desc">目标匹配度越高、新增课程上限越大，方案覆盖范围越广</div></div>
+              </div>
+              <div class="grid grid-3">
+                <div>
+                  <div class="small muted" style="margin-bottom:8px;">目标匹配度：<b style="color:#101828;">{{ constraints.target_match }}</b></div>
+                  <input type="range" min="60" max="90" step="1" v-model.number="constraints.target_match" style="width:100%;">
+                </div>
+                <div>
+                  <div class="small muted" style="margin-bottom:8px;">最多新增课程（门）</div>
+                  <input class="input" type="number" min="1" max="10" v-model.number="constraints.max_new_courses">
+                </div>
+                <div>
+                  <div class="small muted" style="margin-bottom:8px;">总学分增幅上限（%）</div>
+                  <input class="input" type="number" min="5" max="30" v-model.number="constraints.max_credit_delta_pct">
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                <button class="btn primary" @click="makePlan" :disabled="busy.plan">{{ busy.plan ? '生成中…' : (plan ? '重新生成方案' : '生成调整方案') }}</button>
+              </div>
+            </div>
+
+            <div v-if="plan" class="card" style="margin-top:18px;">
+              <div class="card-head">
+                <div><h3>方案总览</h3><div class="desc">{{ plan.summary }}</div></div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <span class="tag blue">目标 {{ plan.constraints.target_match }}</span>
+                  <span class="tag green">综合得分 {{ plan.evaluation.score }}</span>
+                </div>
+              </div>
+              <div class="grid grid-4" style="gap:12px;margin-bottom:18px;">
+                <div class="metric"><div class="k">匹配度变化</div><div class="v">{{ plan.evaluation.match_before }} → {{ plan.evaluation.match_after }}</div></div>
+                <div class="metric"><div class="k">新增课程</div><div class="v">{{ plan.evaluation.new_courses }}<small>门</small></div></div>
+                <div class="metric"><div class="k">学分变化</div><div class="v">{{ plan.evaluation.credit_delta_pct > 0 ? '+' : '' }}{{ plan.evaluation.credit_delta_pct }}<small>%</small></div></div>
+                <div class="metric"><div class="k">学时变化</div><div class="v">{{ plan.evaluation.hours_delta > 0 ? '+' : '' }}{{ plan.evaluation.hours_delta }}<small>学时</small></div></div>
+              </div>
+              <div class="small muted" style="margin-bottom:6px;">匹配度提升</div>
+              <div class="progress"><i :style="{width: Math.min(100, plan.evaluation.match_after) + '%'}"></i></div>
+              <div class="notice warn" v-if="plan.evaluation.match_after < plan.constraints.target_match" style="margin-top:12px;">
+                当前方案达到 {{ plan.evaluation.match_after }} 分，未达到 {{ plan.constraints.target_match }} 分的目标。原因是受「最多新增课程 {{ plan.constraints.max_new_courses }} 门」「总学分增幅 ≤ {{ plan.constraints.max_credit_delta_pct }}%」等约束限制，可在上方上调参数后重新生成，系统会在约束内尽量逼近目标。
+              </div>
+
+              <div class="divider"></div>
+              <div class="small muted" style="margin-bottom:10px;">方案迭代记录（系统自动检查约束并修正）</div>
+              <div class="versions">
+                <div v-for="v in plan.versions" :key="v.version" class="version-card" :class="{best: v.version === plan.best_version}">
+                  <div class="v"><span>V{{ v.version }}</span><span v-if="v.version === plan.best_version" class="tag blue">采用</span></div>
+                  <div class="m">{{ v.evaluation.match_after }}</div>
+                  <div class="s">得分 {{ v.evaluation.score }} · 违规 {{ v.evaluation.violations.length }}</div>
+                </div>
+              </div>
+              <div class="small muted" v-if="plan.versions.length > 1" style="margin-top:8px;">
+                系统优先采用「无违规且综合得分最高」的版本，因此可能出现匹配度略低、但约束完全合规的版本被采用。
+              </div>
+
+              <div class="notice" :class="plan.evaluation.violations.length ? 'warn' : 'ok'" style="margin-top:14px;">
+                <span v-if="!plan.evaluation.violations.length">约束检查全部通过：学分增幅、课程学时、实践比例、课程重复均符合要求。</span>
+                <span v-else>仍有 {{ plan.evaluation.violations.length }} 项约束未满足：{{ plan.evaluation.violations.join('；') }}</span>
+              </div>
+            </div>
+
+            <div v-if="plan" class="card" style="margin-top:18px;">
+              <div class="card-head">
+                <div><h3>具体调整动作</h3><div class="desc">每条动作都附带数据依据，可直接写入申报材料</div></div>
+                <span class="tag gray">{{ plan.actions.length }} 条</span>
+              </div>
+              <div v-for="(a,i) in plan.actions" :key="i" class="action-item">
+                <div class="type">
+                  <span class="tag" :class="actionTagClass(a.type)">{{ actionTypeName(a.type) }}</span>
+                </div>
+                <div class="body">
+                  <h4>{{ a.course }}<span class="delta" v-if="a.hours_delta">{{ a.hours_delta > 0 ? '+' : '' }}{{ a.hours_delta }} {{ a.type==='enrollment' ? '%' : '学时' }}</span></h4>
+                  <p>{{ a.reason }}</p>
+                  <div class="ev">
+                    <span v-for="(e,j) in a.evidence" :key="j" class="ev-chip">{{ e }}</span>
+                    <span v-for="(s,j) in (a.skills || [])" :key="'s'+j" class="ev-chip">{{ s.name }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="plan" style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+              <button class="btn" @click="go('analysis')">返回诊断</button>
+              <button class="btn accent" @click="runSimulation" :disabled="busy.sim">{{ busy.sim ? '模拟中…' : (sim ? '重新模拟效果' : '下一步：效果模拟') }}</button>
+            </div>
+          </template>
+        </section>
+
+        <!-- ============ 效果模拟 ============ -->
+        <section v-if="view==='simulation'">
+          <div class="page-head">
+            <div>
+              <h1>效果模拟</h1>
+              <p>方案从 2026 级新生开始执行，按四年逐步生效，给出乐观 / 基准 / 悲观三种情景</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn primary" @click="runSimulation" :disabled="busy.sim">{{ busy.sim ? '模拟中…' : '重新模拟' }}</button>
+            </div>
+          </div>
+
+          <div v-if="!plan" class="empty">
+            <div class="icon">◎</div>
+            <div class="big">请先生成调整方案</div>
+            <div>效果模拟以方案中的课程变化为输入</div>
+            <button class="btn accent" style="margin-top:18px;" @click="go('plan')">去生成方案</button>
+          </div>
+
+          <template v-else-if="sim">
+            <div class="grid grid-3">
+              <div v-for="s in sim.scenarios" :key="s.name" class="scenario" :class="{base: s.name==='基准'}">
+                <h4><span>{{ s.name }}情景</span><span class="tag" :class="s.name==='乐观'?'green':(s.name==='悲观'?'orange':'blue')">系数 {{ s.factor }}</span></h4>
+                <div class="desc">{{ s.desc }}</div>
+                <div class="big">{{ s.match }}</div>
+                <div class="small muted" style="margin-bottom:10px;">毕业时培养匹配度</div>
+                <div class="row"><span>就业率</span><b>{{ s.employment }}%</b></div>
+                <div class="row"><span>平均起薪</span><b>{{ s.salary.toLocaleString() }} 元</b></div>
+                <div class="row"><span>专业对口率</span><b>{{ s.match_rate }}%</b></div>
+              </div>
+            </div>
+
+            <div class="grid grid-2" style="margin-top:18px;">
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>匹配度逐年提升</h3><div class="desc">大一到大四的生效比例：35% → 62% → 82% → 100%</div></div>
+                  <div class="chart-legend">
+                    <span v-for="(s,i) in sim.scenarios" :key="s.name"><i :style="{background: scenarioColors[i]}"></i>{{ s.name }}</span>
+                  </div>
+                </div>
+                <chart-box :option="timelineOption" height="320px"></chart-box>
+              </div>
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>毕业时就业指标</h3><div class="desc">三种情景下的毕业就业率</div></div>
+                </div>
+                <chart-box :option="employmentOption" height="320px"></chart-box>
+              </div>
+            </div>
+
+            <div class="grid grid-2" style="margin-top:18px;">
+              <div class="card">
+                <div class="card-head"><div><h3>预测假设</h3><div class="desc">所有预测都基于可解释的公式，而不是模型「凭感觉」</div></div></div>
+                <ol style="margin:0;padding-left:18px;font-size:12.5px;color:#475467;line-height:2;">
+                  <li v-for="(a,i) in sim.assumptions" :key="i">{{ a }}</li>
+                </ol>
+              </div>
+              <div class="card">
+                <div class="card-head"><div><h3>使用说明</h3><div class="desc">预测结果的边界</div></div></div>
+                <div class="notice warn">{{ sim.disclaimer }}</div>
+                <p class="small muted" style="margin-top:14px;line-height:1.9;">
+                  建议答辩时同时展示「公式 + 基准值 + 情景系数」三项，说明数字是如何得到的，并说明每年会用真实毕业生数据校准一次。
+                </p>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+              <button class="btn" @click="go('plan')">返回方案</button>
+              <button class="btn accent" @click="runRisk" :disabled="busy.risk">{{ busy.risk ? '识别中…' : (risk ? '重新识别风险' : '下一步：风险评估') }}</button>
+            </div>
+          </template>
+        </section>
+
+        <!-- ============ 风险评估 ============ -->
+        <section v-if="view==='risk'">
+          <div class="page-head">
+            <div>
+              <h1>风险评估</h1>
+              <p>识别方案落地过程中的关键风险，给出触发条件、影响程度与可执行应对措施</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn primary" @click="runRisk" :disabled="busy.risk">{{ busy.risk ? '识别中…' : '重新评估' }}</button>
+            </div>
+          </div>
+
+          <div v-if="!sim" class="empty">
+            <div class="icon">◎</div>
+            <div class="big">请先完成效果模拟</div>
+            <div>风险评估会结合模拟结果判断就业质量风险</div>
+            <button class="btn accent" style="margin-top:18px;" @click="go('simulation')">去模拟</button>
+          </div>
+
+          <template v-else-if="risk">
+            <div class="grid grid-2">
+              <div class="card">
+                <div class="card-head">
+                  <div><h3>风险矩阵</h3><div class="desc">横轴为发生概率，纵轴为影响程度</div></div>
+                </div>
+                <chart-box :option="riskOption" height="330px"></chart-box>
+              </div>
+              <div class="card">
+                <div class="card-head"><div><h3>风险概览</h3><div class="desc">按等级排序，优先处理高等级风险</div></div></div>
+                <div class="metric-row" style="margin-bottom:18px;">
+                  <div class="metric"><div class="k">高风险</div><div class="v" style="color:#b42318;">{{ riskCount('高') }}</div></div>
+                  <div class="metric"><div class="k">中风险</div><div class="v" style="color:#b54708;">{{ riskCount('中') }}</div></div>
+                  <div class="metric"><div class="k">低风险</div><div class="v" style="color:#067647;">{{ riskCount('低') }}</div></div>
+                </div>
+                <div v-for="r in risk.risks" :key="r.name" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #eef2f7;">
+                  <div>
+                    <div style="font-size:13px;font-weight:500;">{{ r.name }}</div>
+                    <div class="small muted">概率 {{ probPct(r) }}% · 影响 {{ r.impact }}/5</div>
+                  </div>
+                  <span class="tag" :class="r.level==='高'?'red':(r.level==='中'?'orange':'green')">{{ r.level }}风险</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-2" style="margin-top:18px;">
+              <div v-for="r in risk.risks" :key="'c'+r.name" class="risk-card" :class="r.level==='高'?'high':(r.level==='中'?'mid':'low')">
+                <h4>
+                  <span class="tag" :class="r.level==='高'?'red':(r.level==='中'?'orange':'green')">{{ r.level }}</span>
+                  {{ r.name }}
+                  <span class="small muted" style="margin-left:auto;">概率 {{ probPct(r) }}% · 影响 {{ r.impact }}/5</span>
+                </h4>
+                <div class="small" style="color:#475467;line-height:1.7;">{{ r.desc }}</div>
+                <div class="trigger"><b>触发条件：</b>{{ r.trigger }}</div>
+                <div class="small" style="font-weight:600;margin-bottom:4px;">应对措施</div>
+                <ol><li v-for="(m,i) in r.measures" :key="i">{{ m }}</li></ol>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+              <button class="btn" @click="go('simulation')">返回模拟</button>
+              <button class="btn accent" @click="go('report')">查看决策报告</button>
+            </div>
+          </template>
+        </section>
+
+        <!-- ============ 报告中心 ============ -->
+        <section v-if="view==='report'">
+          <div class="page-head no-print">
+            <div>
+              <h1>决策报告</h1>
+              <p>汇总诊断、方案、模拟与风险结论，可导出 Excel 或直接打印为 PDF</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn" @click="exportExcel" :disabled="!analysis || !plan || !sim || !risk">导出 Excel</button>
+              <button class="btn primary" @click="printReport" :disabled="!analysis">打印 / 另存 PDF</button>
+            </div>
+          </div>
+
+          <div v-if="!analysis" class="empty no-print">
+            <div class="icon">◎</div>
+            <div class="big">暂无报告内容</div>
+            <div>请先完成供需诊断</div>
+            <button class="btn accent" style="margin-top:18px;" @click="go('analysis')">去诊断</button>
+          </div>
+
+          <div v-else class="report-preview">
+            <h1>{{ analysis.major }}专业动态调整分析报告</h1>
+            <div class="meta">
+              生成时间 {{ reportTime }} · 数据范围 {{ analysis.scope.date_range.join(' ~ ') }} ·
+              岗位样本 {{ analysis.scope.postings }} 条 · 课程 {{ analysis.scope.courses }} 门
+            </div>
+
+            <h2>一、核心结论</h2>
+            <p>
+              当前 {{ analysis.major }} 专业的培养匹配度为 <b>{{ analysis.match_score }}/100</b>。
+              在分析的 {{ analysis.skills.length }} 项技能中，有 {{ gapCount }} 项存在明显缺口，
+              其中 {{ analysis.top_gaps.slice(0,3).map(s=>s.name).join('、') }} 缺口最大。
+              建议优先建设「{{ analysis.directions[0] ? analysis.directions[0].name : '—' }}」方向，
+              并同步优化招生规模。
+              <span v-if="plan">按本报告调整方案实施后，预计培养匹配度可提升至 <b>{{ plan.evaluation.match_after }}/100</b>（共 {{ plan.actions.length }} 条调整动作）。</span>
+            </p>
+
+            <h2>二、数据范围与分析方法</h2>
+            <table class="print-block">
+              <tbody>
+                <tr><th style="width:160px;">招聘数据</th><td>{{ analysis.scope.postings }} 条，覆盖 {{ analysis.scope.clusters.join('、') }}</td></tr>
+                <tr><th>培养方案</th><td>{{ analysis.scope.courses }} 门课程，总学分 {{ analysis.scope.total_credits }}，实践学分占比 {{ analysis.scope.practice_ratio }}%</td></tr>
+                <tr><th>就业数据</th><td>{{ analysis.employment.length }} 个年度，最近一届就业率 {{ analysis.base.employment_rate }}%、起薪 {{ analysis.base.salary }} 元、对口率 {{ analysis.base.match_rate }}%</td></tr>
+                <tr><th>技能需求指数</th><td>D = 100 × (0.6 × 相对频次 + 0.4 × 岗位提及率) ^ 0.7</td></tr>
+                <tr><th>培养覆盖度</th><td>C = 100 × (1 − e^(−W/3.2))，W 为课程学分 × 技能映射强度加权和</td></tr>
+                <tr><th>技能缺口</th><td>G = max(0, D − C)</td></tr>
+              </tbody>
+            </table>
+
+            <h2>三、重点技能缺口</h2>
+            <table class="print-block">
+              <thead><tr><th>技能</th><th>分类</th><th>需求</th><th>覆盖</th><th>缺口</th></tr></thead>
+              <tbody>
+                <tr v-for="s in analysis.top_gaps.slice(0,8)" :key="s.skill_id">
+                  <td>{{ s.name }}</td><td>{{ s.cat }}</td><td>{{ s.demand }}</td><td>{{ s.coverage }}</td><td>{{ s.gap }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <template v-if="plan">
+              <h2>四、课程调整方案</h2>
+              <p>{{ plan.summary }}</p>
+              <table class="print-block">
+                <thead><tr><th style="width:90px;">动作</th><th style="width:200px;">课程 / 对象</th><th>调整理由</th></tr></thead>
+                <tbody>
+                  <tr v-for="(a,i) in plan.actions" :key="i">
+                    <td>{{ actionTypeName(a.type) }}</td>
+                    <td>{{ a.course }}<span v-if="a.hours_delta">（{{ a.hours_delta>0?'+':'' }}{{ a.hours_delta }}）</span></td>
+                    <td>{{ a.reason }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style="margin-top:10px;">
+                约束检查：{{ plan.evaluation.violations.length ? plan.evaluation.violations.join('；') : '全部通过' }}。
+                预计匹配度由 {{ plan.evaluation.match_before }} 提升至 {{ plan.evaluation.match_after }}，
+                综合得分 {{ plan.evaluation.score }}。
+              </p>
+            </template>
+
+            <template v-if="sim">
+              <h2>五、效果模拟</h2>
+              <table class="print-block">
+                <thead><tr><th>情景</th><th>匹配度</th><th>就业率</th><th>平均起薪</th><th>对口率</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in sim.scenarios" :key="s.name">
+                    <td>{{ s.name }}</td><td>{{ s.match }}</td><td>{{ s.employment }}%</td><td>{{ s.salary.toLocaleString() }} 元</td><td>{{ s.match_rate }}%</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="small">{{ sim.disclaimer }}</p>
+            </template>
+
+            <template v-if="risk">
+              <h2>六、风险评估与应对</h2>
+              <table class="print-block">
+                <thead><tr><th style="width:70px;">等级</th><th style="width:170px;">风险</th><th>触发条件</th><th>主要应对措施</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in risk.risks" :key="r.name">
+                    <td>{{ r.level }}</td>
+                    <td>{{ r.name }}</td>
+                    <td>{{ r.trigger }}</td>
+                    <td>{{ r.measures[0] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+
+            <h2>七、结论与建议</h2>
+            <p>
+              建议以「{{ analysis.directions[0] ? analysis.directions[0].name : '核心方向' }}」为突破口，
+              按方案分三年逐步落地课程调整；同时建立每年一次的岗位数据更新与毕业生跟踪校准机制，
+              使专业调整从一次性动作变为可持续的闭环。
+            </p>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" v-if="toast">{{ toast }}</div>
+  <div class="loading-mask" v-if="busy.analyze || busy.plan || busy.sim || busy.risk">
+    <div class="loading-box"><span class="spinner"></span>{{ busyText }}</div>
+  </div>
+</div>
+
+<script src="vendor/vue.global.prod.js"></script>
+<script src="vendor/echarts.min.js"></script>
+<script>window.__API_BASE__="https://chjz-xjwxfikmxd.cn-hangzhou.fcapp.run";</script>
+<script src="app.js"></script>
+</body>
+</html>
